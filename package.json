@@ -1,22 +1,44 @@
 {
   "name": "devresearch-mcp",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "description": "Cross-platform dev research MCP with hype-vs-substance detection (HN + Reddit + Lobsters)",
   "type": "module",
+  "author": "Toan Nguyen",
   "bin": {
     "devresearch-mcp": "./dist/index.js"
   },
   "main": "./dist/index.js",
-  "files": ["dist", "README.md"],
+  "files": ["dist", "README.md", "LICENSE"],
   "scripts": {
     "build": "tsc && node -e \"require('fs').copyFileSync('src/storage/schema.sql', 'dist/storage/schema.sql')\"",
     "dev": "tsx src/index.ts",
     "start": "node dist/index.js",
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "npm run build && npm test"
   },
-  "keywords": ["mcp", "model-context-protocol", "claude", "research", "hackernews", "reddit", "lobsters"],
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "claude",
+    "claude-code",
+    "anthropic",
+    "research",
+    "hype-detection",
+    "developer-tools",
+    "hackernews",
+    "reddit",
+    "lobsters"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/toannd/devresearch-mcp.git"
+  },
+  "homepage": "https://github.com/toannd/devresearch-mcp#readme",
+  "bugs": {
+    "url": "https://github.com/toannd/devresearch-mcp/issues"
+  },
   "license": "MIT",
   "engines": {
     "node": ">=20"
