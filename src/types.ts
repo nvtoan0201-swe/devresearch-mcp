@@ -20,4 +20,23 @@ export interface NormalizedComment {
   parentId?: string;
   score: number;
   ts: string;
+  depth: number;
+}
+
+export interface PostDetail {
+  item: NormalizedItem;
+  comments: NormalizedComment[];
+}
+
+export interface UserSummary {
+  platform: Platform;
+  username: string;
+  karma?: number;
+  createdAt?: string;
+  about?: string;
+}
+
+export interface TrendingOptions {
+  limit?: number;
+  windowDays?: number;
 }
