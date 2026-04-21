@@ -49,10 +49,16 @@ function parse(result: { content: Array<{ type: "text"; text: string }> }): unkn
 }
 
 describe("listTools", () => {
-  it("advertises 4 tools with schemas", () => {
+  it("advertises 5 tools with schemas", () => {
     const tools = listTools();
     const names = tools.map((t) => t.name).sort();
-    expect(names).toEqual(["get_post", "get_user", "search", "trending"]);
+    expect(names).toEqual([
+      "get_post",
+      "get_user",
+      "research",
+      "search",
+      "trending",
+    ]);
     for (const t of tools) {
       expect(t.inputSchema).toBeDefined();
     }
@@ -246,5 +252,102 @@ describe("callTool trending", () => {
       { fetchers: new Map(), db, config },
     );
     expect(res.isError).toBe(true);
+  });
+});
+
+describe("callTool research", () => {
+  it("errors with helpful message when no LLM client is injected", async () => {
+    const res = await callTool(
+      "research",
+      { topic: "bun" },
+      { fetchers: new Map(), db, config },
+    );
+    expect(res.isError).toBe(true);
+    expect(res.content[0].text).toMatch(/ANTHROPIC_API_KEY/);
+  });
+
+  it("rejects empty topic via zod", async () => {
+    const res = await callTool(
+      "research",
+      { topic: "" },
+      { fetchers: new Map(), db, config, llm: { complete: async () => "" } },
+    );
+    expect(res.isError).toBe(true);
+    expect(res.content[0].text).toMatch(/Invalid args/);
+  });
+
+  it("returns synthesized research result when LLM + fetchers present", async () => {
+    const item: NormalizedItem = {
+      id: "hn_1",
+      platform: "hn",
+      url: "https://bun.sh/blog/1-2",
+      title: "Bun 1.2",
+      author: "j",
+      score: 300,
+      ts: "2026-04-20T00:00:00Z",
+      raw: {},
+    };
+    const fetchers = new Map<Platform, Fetcher>([
+      [
+        "hn",
+        stubFetcher("hn", {
+          async search() {
+            return [item];
+          },
+          async getPost() {
+            return {
+              item,
+              comments: [
+                {
+                  id: "hn_c1",
+                  itemId: "hn_1",
+                  author: "u",
+                  text: "Works great in prod",
+                  score: 20,
+                  ts: "2026-04-20T01:00:00Z",
+                  depth: 0,
+                },
+              ],
+            };
+          },
+        }),
+      ],
+    ]);
+    const llmJson = JSON.stringify({
+      summary: "Bun is moving fast.",
+      perspectives: {
+        pro_camp: { main_points: ["speed"], key_voices: [], strength: "strong" },
+        con_camp: { main_points: [], key_voices: [], strength: "weak" },
+        disagreement_depth: "technical",
+      },
+      hype_assessment: {
+        signal: "mild_hype",
+        reasoning: "High velocity, substantive critique.",
+        red_flags: [],
+        green_flags: ["benchmarks"],
+      },
+      misconceptions: [],
+    });
+    const res = await callTool(
+      "research",
+      { topic: "bun" },
+      {
+        fetchers,
+        db,
+        config,
+        llm: { complete: async () => llmJson },
+        now: () => new Date("2026-04-20T03:00:00Z"),
+      },
+    );
+    expect(res.isError).toBeUndefined();
+    const data = parse(res) as {
+      topic: string;
+      summary: string;
+      hype_assessment: { signal: string; velocity: number };
+    };
+    expect(data.topic).toBe("bun");
+    expect(data.summary).toMatch(/Bun is moving fast/);
+    expect(data.hype_assessment.signal).toBe("mild_hype");
+    expect(data.hype_assessment.velocity).toBeGreaterThanOrEqual(0);
   });
 });

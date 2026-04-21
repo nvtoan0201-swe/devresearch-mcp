@@ -5,11 +5,14 @@ import type { Fetcher } from "../fetchers/types.js";
 import type { Platform } from "../types.js";
 import { searchAll } from "../orchestrator.js";
 import { scoreItem } from "../scoring/heuristics.js";
+import type { LlmClient } from "../llm/client.js";
+import { runResearch } from "../llm/research.js";
 
 export interface ToolDeps {
   fetchers: Map<Platform, Fetcher>;
   db: Db;
   config: Config;
+  llm?: LlmClient;
   now?: () => Date;
 }
 
@@ -52,6 +55,12 @@ const TrendingArgs = z.object({
   platform: PlatformEnum.optional(),
   limit: z.number().int().positive().max(100).optional(),
   windowDays: z.number().int().positive().max(365).optional(),
+});
+
+const ResearchArgs = z.object({
+  topic: z.string().min(1),
+  windowDays: z.number().int().positive().max(365).optional(),
+  depth: z.enum(["normal", "deep"]).optional(),
 });
 
 export function listTools(): McpToolDefinition[] {
@@ -117,6 +126,20 @@ export function listTools(): McpToolDefinition[] {
         },
       },
     },
+    {
+      name: "research",
+      description:
+        "Synthesize a hype-vs-substance analysis for a topic across HN/Reddit/Lobsters using heuristic signals + an LLM narrative (Anthropic Haiku).",
+      inputSchema: {
+        type: "object",
+        properties: {
+          topic: { type: "string", description: "Topic to research" },
+          windowDays: { type: "integer", minimum: 1, maximum: 365 },
+          depth: { type: "string", enum: ["normal", "deep"] },
+        },
+        required: ["topic"],
+      },
+    },
   ];
 }
 
@@ -148,6 +171,8 @@ export async function callTool(
         return await handleGetUser(GetUserArgs.parse(rawArgs ?? {}), deps);
       case "trending":
         return await handleTrending(TrendingArgs.parse(rawArgs ?? {}), deps);
+      case "research":
+        return await handleResearch(ResearchArgs.parse(rawArgs ?? {}), deps);
       default:
         return errorResult(`Unknown tool: ${name}`);
     }
@@ -274,4 +299,25 @@ async function handleTrending(
   );
   const merged = results.flatMap((r) => r.items);
   return textResult({ count: merged.length, errors, items: merged });
+}
+
+async function handleResearch(
+  args: z.infer<typeof ResearchArgs>,
+  deps: ToolDeps,
+): Promise<McpToolResult> {
+  if (!deps.llm) {
+    return errorResult(
+      `research requires an LLM client — set ${deps.config.llm.api_key_env} in env`,
+    );
+  }
+  const result = await runResearch({
+    topic: args.topic,
+    client: deps.llm,
+    fetchers: deps.fetchers,
+    db: deps.db,
+    config: deps.config,
+    options: { windowDays: args.windowDays, depth: args.depth },
+    now: deps.now?.(),
+  });
+  return textResult(result);
 }
