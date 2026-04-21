@@ -1,0 +1,41 @@
+{
+  "kind": "Listing",
+  "data": {
+    "after": "t3_abc",
+    "children": [
+      {
+        "kind": "t3",
+        "data": {
+          "id": "1a2b3c",
+          "name": "t3_1a2b3c",
+          "title": "Ask HN equivalent: what's your opinion of Bun?",
+          "url": "https://www.reddit.com/r/javascript/comments/1a2b3c/ask_bun/",
+          "permalink": "/r/javascript/comments/1a2b3c/ask_bun/",
+          "author": "dev_jane",
+          "score": 412,
+          "num_comments": 87,
+          "created_utc": 1775193600,
+          "subreddit": "javascript",
+          "is_self": true,
+          "selftext": "What do you think..."
+        }
+      },
+      {
+        "kind": "t3",
+        "data": {
+          "id": "9z8y7x",
+          "name": "t3_9z8y7x",
+          "title": "Rust in the kernel",
+          "url": "https://lkml.org/lkml/2026/4/10/42",
+          "permalink": "/r/rust/comments/9z8y7x/rust_in_the_kernel/",
+          "author": "kernel_fan",
+          "score": 1204,
+          "num_comments": 230,
+          "created_utc": 1775280000,
+          "subreddit": "rust",
+          "is_self": false
+        }
+      }
+    ]
+  }
+}
