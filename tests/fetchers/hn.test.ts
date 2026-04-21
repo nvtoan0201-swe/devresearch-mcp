@@ -8,6 +8,12 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const FIXTURE = JSON.parse(
   fs.readFileSync(path.join(__dirname, "../fixtures/hn/algolia.json"), "utf8"),
 );
+const ITEM_TREE = JSON.parse(
+  fs.readFileSync(path.join(__dirname, "../fixtures/hn/item_tree.json"), "utf8"),
+);
+const USER_FIXTURE = JSON.parse(
+  fs.readFileSync(path.join(__dirname, "../fixtures/hn/user.json"), "utf8"),
+);
 
 function mockFetchJson(payload: unknown): typeof fetch {
   return vi.fn(async () =>
@@ -64,5 +70,46 @@ describe("hn fetcher", () => {
     expect(calledUrl).toContain("tags=story");
     expect(calledUrl).toContain("hitsPerPage=5");
     expect(calledUrl).toContain("numericFilters=created_at_i%3E%3D1775865600");
+  });
+
+  it("getPost flattens comment tree with depth + parentId", async () => {
+    const fetchFn = mockFetchJson(ITEM_TREE);
+    const f = createHnFetcher({ http: { fetchFn } });
+    const detail = await f.getPost!("hn_111");
+    expect(detail.item.id).toBe("hn_111");
+    expect(detail.item.title).toBe("Bun 1.2 released");
+    expect(detail.comments).toHaveLength(3);
+    const alice = detail.comments.find((c) => c.author === "alice");
+    const bob = detail.comments.find((c) => c.author === "bob");
+    expect(alice?.depth).toBe(0);
+    expect(bob?.depth).toBe(1);
+    expect(bob?.parentId).toBe(alice?.id);
+    expect(alice?.text).toContain("great");
+    expect(alice?.text).not.toContain("<b>");
+  });
+
+  it("getUser returns karma and about", async () => {
+    const fetchFn = mockFetchJson(USER_FIXTURE);
+    const f = createHnFetcher({ http: { fetchFn } });
+    const u = await f.getUser!("pg");
+    expect(u.platform).toBe("hn");
+    expect(u.username).toBe("pg");
+    expect(u.karma).toBe(155000);
+    expect(u.about).toBe("Co-founder of Y Combinator.");
+  });
+
+  it("trending calls front_page tag", async () => {
+    const fetchFn = vi.fn(
+      async () =>
+        new Response(JSON.stringify({ hits: [] }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+    ) as unknown as typeof fetch;
+    const f = createHnFetcher({ http: { fetchFn } });
+    await f.trending!({ limit: 5 });
+    const url = (fetchFn as unknown as ReturnType<typeof vi.fn>).mock
+      .calls[0][0] as string;
+    expect(url).toContain("tags=front_page");
   });
 });

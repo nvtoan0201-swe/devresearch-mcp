@@ -1,0 +1,36 @@
+{
+  "id": 111,
+  "type": "story",
+  "author": "op",
+  "title": "Bun 1.2 released",
+  "url": "https://bun.sh/blog/1-2",
+  "points": 800,
+  "created_at": "2026-04-20T00:00:00.000Z",
+  "children": [
+    {
+      "id": 1001,
+      "type": "comment",
+      "author": "alice",
+      "text": "<p>This is <b>great</b>.</p>",
+      "created_at": "2026-04-20T01:00:00.000Z",
+      "children": [
+        {
+          "id": 1002,
+          "type": "comment",
+          "author": "bob",
+          "text": "I agree",
+          "created_at": "2026-04-20T02:00:00.000Z",
+          "children": []
+        }
+      ]
+    },
+    {
+      "id": 1003,
+      "type": "comment",
+      "author": "carol",
+      "text": "Skeptical about claims",
+      "created_at": "2026-04-20T03:00:00.000Z",
+      "children": []
+    }
+  ]
+}
