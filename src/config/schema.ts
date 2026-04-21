@@ -32,15 +32,6 @@ export const ConfigSchema = z.object({
       path: z.string().default("~/.devresearch-mcp/cache.db"),
     })
     .default({}),
-  llm: z
-    .object({
-      provider: z.enum(["anthropic"]).default("anthropic"),
-      model: z.string().default("claude-haiku-4-5"),
-      api_key_env: z.string().default("ANTHROPIC_API_KEY"),
-      max_tokens: z.number().int().positive().max(8000).default(2000),
-      temperature: z.number().min(0).max(1).default(0.2),
-    })
-    .default({}),
   filters: z
     .object({
       drop_patterns: z

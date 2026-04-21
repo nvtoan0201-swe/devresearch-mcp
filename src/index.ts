@@ -10,7 +10,6 @@ import { defaultConfigPath, defaultCachePath, expandHome } from "./config/paths.
 import { openDb } from "./storage/db.js";
 import { createFetchers } from "./fetchers/registry.js";
 import { listTools, callTool } from "./mcp/tools.js";
-import { createAnthropicClient, type LlmClient } from "./llm/client.js";
 
 async function main(): Promise<void> {
   const configPath = process.env.DEVRESEARCH_CONFIG ?? defaultConfigPath();
@@ -20,19 +19,8 @@ async function main(): Promise<void> {
   const db = openDb(cachePath);
   const fetchers = createFetchers(config);
 
-  const apiKeyEnv = config.llm.api_key_env;
-  const apiKey = process.env[apiKeyEnv];
-  let llm: LlmClient | undefined;
-  if (apiKey && apiKey.trim().length > 0) {
-    llm = createAnthropicClient(config, apiKey);
-  } else {
-    process.stderr.write(
-      `devresearch-mcp: ${apiKeyEnv} not set — 'research' tool will be disabled\n`,
-    );
-  }
-
   const server = new Server(
-    { name: "devresearch-mcp", version: "0.0.1" },
+    { name: "devresearch-mcp", version: "0.1.0" },
     { capabilities: { tools: {} } },
   );
 
@@ -42,7 +30,7 @@ async function main(): Promise<void> {
 
   server.setRequestHandler(CallToolRequestSchema, async (req) => {
     const { name, arguments: args } = req.params;
-    const result = await callTool(name, args ?? {}, { fetchers, db, config, llm });
+    const result = await callTool(name, args ?? {}, { fetchers, db, config });
     return result as unknown as { content: typeof result.content; isError?: boolean };
   });
 

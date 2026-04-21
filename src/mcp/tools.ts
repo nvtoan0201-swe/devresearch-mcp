@@ -5,14 +5,12 @@ import type { Fetcher } from "../fetchers/types.js";
 import type { Platform } from "../types.js";
 import { searchAll } from "../orchestrator.js";
 import { scoreItem } from "../scoring/heuristics.js";
-import type { LlmClient } from "../llm/client.js";
-import { runResearch } from "../llm/research.js";
+import { runResearch } from "../research.js";
 
 export interface ToolDeps {
   fetchers: Map<Platform, Fetcher>;
   db: Db;
   config: Config;
-  llm?: LlmClient;
   now?: () => Date;
 }
 
@@ -129,7 +127,7 @@ export function listTools(): McpToolDefinition[] {
     {
       name: "research",
       description:
-        "Synthesize a hype-vs-substance analysis for a topic across HN/Reddit/Lobsters using heuristic signals + an LLM narrative (Anthropic Haiku).",
+        "Gather top discussions for a topic across HN/Reddit/Lobsters, compute heuristic hype-vs-substance signals (velocity, buzzword density, expert engagement, dissent, depth, longevity), and return structured data + top comments. The calling LLM synthesizes the narrative.",
       inputSchema: {
         type: "object",
         properties: {
@@ -305,14 +303,8 @@ async function handleResearch(
   args: z.infer<typeof ResearchArgs>,
   deps: ToolDeps,
 ): Promise<McpToolResult> {
-  if (!deps.llm) {
-    return errorResult(
-      `research requires an LLM client — set ${deps.config.llm.api_key_env} in env`,
-    );
-  }
   const result = await runResearch({
     topic: args.topic,
-    client: deps.llm,
     fetchers: deps.fetchers,
     db: deps.db,
     config: deps.config,

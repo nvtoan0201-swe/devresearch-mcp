@@ -256,27 +256,17 @@ describe("callTool trending", () => {
 });
 
 describe("callTool research", () => {
-  it("errors with helpful message when no LLM client is injected", async () => {
-    const res = await callTool(
-      "research",
-      { topic: "bun" },
-      { fetchers: new Map(), db, config },
-    );
-    expect(res.isError).toBe(true);
-    expect(res.content[0].text).toMatch(/ANTHROPIC_API_KEY/);
-  });
-
   it("rejects empty topic via zod", async () => {
     const res = await callTool(
       "research",
       { topic: "" },
-      { fetchers: new Map(), db, config, llm: { complete: async () => "" } },
+      { fetchers: new Map(), db, config },
     );
     expect(res.isError).toBe(true);
     expect(res.content[0].text).toMatch(/Invalid args/);
   });
 
-  it("returns synthesized research result when LLM + fetchers present", async () => {
+  it("returns structured data with heuristic signals (no LLM required)", async () => {
     const item: NormalizedItem = {
       id: "hn_1",
       platform: "hn",
@@ -313,21 +303,6 @@ describe("callTool research", () => {
         }),
       ],
     ]);
-    const llmJson = JSON.stringify({
-      summary: "Bun is moving fast.",
-      perspectives: {
-        pro_camp: { main_points: ["speed"], key_voices: [], strength: "strong" },
-        con_camp: { main_points: [], key_voices: [], strength: "weak" },
-        disagreement_depth: "technical",
-      },
-      hype_assessment: {
-        signal: "mild_hype",
-        reasoning: "High velocity, substantive critique.",
-        red_flags: [],
-        green_flags: ["benchmarks"],
-      },
-      misconceptions: [],
-    });
     const res = await callTool(
       "research",
       { topic: "bun" },
@@ -335,19 +310,26 @@ describe("callTool research", () => {
         fetchers,
         db,
         config,
-        llm: { complete: async () => llmJson },
         now: () => new Date("2026-04-20T03:00:00Z"),
       },
     );
     expect(res.isError).toBeUndefined();
     const data = parse(res) as {
       topic: string;
-      summary: string;
-      hype_assessment: { signal: string; velocity: number };
+      confidence: string;
+      top_posts: Array<{ heuristic_scores: { overall: number } }>;
+      aggregate: { hype_signal: string };
+      guidance: string;
     };
     expect(data.topic).toBe("bun");
-    expect(data.summary).toMatch(/Bun is moving fast/);
-    expect(data.hype_assessment.signal).toBe("mild_hype");
-    expect(data.hype_assessment.velocity).toBeGreaterThanOrEqual(0);
+    expect(data.top_posts.length).toBeGreaterThan(0);
+    expect(data.top_posts[0].heuristic_scores.overall).toBeGreaterThanOrEqual(0);
+    expect([
+      "strong_hype",
+      "mild_hype",
+      "balanced",
+      "substantive",
+    ]).toContain(data.aggregate.hype_signal);
+    expect(data.guidance).toBeTruthy();
   });
 });

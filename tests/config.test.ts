@@ -50,7 +50,7 @@ describe("loadConfig", () => {
     expect(fs.existsSync(tmpConfigPath)).toBe(true);
     expect(cfg.sources.enabled).toEqual(["hn", "reddit", "lobsters"]);
     expect(cfg.cache.ttl_hours).toBe(24);
-    expect(cfg.llm.model).toBe("claude-haiku-4-5");
+    expect(cfg.hype_scoring.hype_threshold).toBe(70);
   });
 
   it("reads existing config and merges with defaults", () => {
