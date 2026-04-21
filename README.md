@@ -1,67 +1,97 @@
 # devresearch-mcp
 
-Hỏi Claude Code về bất kỳ công nghệ nào — nó sẽ đi lùng **Hacker News**, **Reddit**, **Lobsters**, đọc bình luận developer thật, trả lời bạn: **thứ này có thực sự tốt hay chỉ hype?**
+Claude Code đọc developer forum giùm bạn.
 
-## Bạn dùng nó để làm gì
+Bạn hỏi *"framework X có đáng dùng không?"* — thay vì Claude đoán từ training data cũ, nó đi đọc **Hacker News**, **Reddit**, **Lobsters** ngay lúc đó, xem developer thật đang nói gì, rồi trả lời.
 
-- *"Bun runtime đã production-ready chưa?"* → Claude kéo 20+ thread, tổng hợp: camp ủng hộ nói gì, camp chê cảnh báo gì.
-- *"tanstack query v5 có gì mới?"* → lấy discussion 30 ngày gần đây, highlight key voices.
-- *"Có gì đang hot trên HN hôm nay?"* → front page snapshot.
-- *"User 'jarredsumner' là ai?"* → karma + profile.
-
-Không kéo marketing blog, không kéo tweet. Chỉ forum developer nơi người ta tranh luận thật.
+---
 
 ## Cài đặt
-
-**1 lệnh.** Cần Node.js ≥ 20. **Không cần API key, không cần config.**
 
 ```bash
 claude mcp add devresearch -- npx -y devresearch-mcp
 ```
 
-Xong. Restart Claude Code, hỏi thử:
+Cần Node.js ≥ 20. Không cần API key. Không cần config.
 
-> *"Dùng devresearch xem gì đang hot trên HN"*
+Restart Claude Code là dùng được.
 
-## Các tool
+---
 
-| Tool | Khi nào dùng |
+## Thử ngay
+
+Hỏi Claude:
+
+> *"Dùng devresearch xem Bun runtime có production-ready chưa"*
+
+Claude sẽ:
+1. Tìm discussion về Bun trên HN + Reddit + Lobsters (30 ngày gần đây)
+2. Đọc top 6 thread — cả bài viết lẫn comment
+3. Chấm điểm heuristic: độ hype, expert engagement, tỷ lệ bất đồng, buzzword density
+4. Tóm tắt: "Có 34 discussion. Camp ủng hộ nói speed; camp phản đối lo native modules. Expert engagement cao (62%), buzzword thấp → substantive, ít hype."
+
+---
+
+## Những gì nó làm được
+
+| Bạn hỏi | Tool được dùng |
 |---|---|
-| `search` | Tìm discussion theo keyword trên cả 3 platform. |
-| `trending` | Xem gì đang hot front page / r/hot / hottest. |
-| `get_post` | Đọc sâu một thread kèm comment tree. |
-| `get_user` | Xem karma / profile của user. |
-| `research` | Gom top discussion + chấm điểm heuristic (velocity, buzzword density, expert engagement…) — Claude tự viết báo cáo hype-vs-substance từ data đó. |
+| *"Tanstack query v5 có gì thay đổi?"* | `research` — tổng hợp + chấm hype |
+| *"Search HN về WebAssembly"* | `search` — list discussion theo keyword |
+| *"HN hôm nay có gì hot?"* | `trending` — front page snapshot |
+| *"Mở thread HN id 42 cho tôi"* | `get_post` — đọc sâu kèm comment tree |
+| *"User jarredsumner karma bao nhiêu?"* | `get_user` — profile + karma |
 
-Không cần nhớ tên tool — hỏi Claude bằng tiếng Việt/English bình thường, nó tự chọn.
+Bạn không cần nhớ tên tool. Hỏi bằng ngôn ngữ bình thường, Claude tự chọn.
+
+---
+
+## Cách nó nhận biết hype
+
+Mỗi post được chấm 6 điểm local (không gọi LLM):
+
+- **velocity** — điểm tăng nhanh như thế nào theo thời gian
+- **buzzword density** — mật độ từ marketing ("revolutionary", "10x", "game-changer"...)
+- **expert engagement** — tỉ lệ comment từ user karma cao
+- **dissent** — tỉ lệ comment phản đối
+- **depth** — độ sâu comment tree (càng sâu → càng nhiều tranh luận kỹ thuật)
+- **longevity** — discussion sống bao lâu sau khi post
+
+Quy luật:
+- Buzzword cao + velocity cao + expert thấp → **strong_hype**
+- Buzzword thấp + expert cao → **substantive**
+- Còn lại → **balanced** hoặc **mild_hype**
+
+---
 
 ## Cache
 
-Kết quả cache ở `~/.devresearch-mcp/cache.db` (SQLite), TTL 24h. Hỏi lại cùng query trong ngày = instant.
+Kết quả cache SQLite ở `~/.devresearch-mcp/cache.db`, TTL 24h. Hỏi lại cùng query trong ngày = instant.
 
-## Cấu hình (tùy chọn)
+---
 
-Mặc định chạy tốt. Muốn tinh chỉnh thì tạo `~/.devresearch-mcp/config.toml`:
+## Cấu hình (không bắt buộc)
+
+Tạo `~/.devresearch-mcp/config.toml` nếu muốn đổi:
 
 ```toml
 [sources.reddit]
-subreddits = ["programming", "rust", "LocalLLaMA", "webdev"]
-
-[cache]
-ttl_hours = 24
+subreddits = ["programming", "rust", "LocalLLaMA"]
 
 [hype_scoring]
 buzzwords = ["game changer", "revolutionary", "next-gen"]
 ```
 
-Override path: `DEVRESEARCH_CONFIG=/đường/dẫn/khác.toml`.
+Đổi path config: `DEVRESEARCH_CONFIG=/path/to/file.toml`.
+
+---
 
 ## Giới hạn
 
-- Reddit public JSON endpoint → có rate limit, thi thoảng chậm.
-- Clustering trùng discussion dựa trên URL + title — chuẩn với link canonical, yếu với thread text-only.
-- `research` trả top 6 post (hoặc 12 với `depth: "deep"`) — đủ dùng, không quá tải context.
+- Reddit dùng public JSON → có rate limit.
+- Clustering duplicate dựa URL + title — chuẩn với link canonical, yếu với thread text-only.
+- Mỗi query `research` trả tối đa 12 post (`depth: "deep"`) hoặc 6 (mặc định).
 
-## License
+---
 
-MIT
+MIT © 2026
