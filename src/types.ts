@@ -8,7 +8,26 @@ export interface NormalizedItem {
   author: string;
   score: number;
   ts: string;
+  excerpt?: string;
+  numComments?: number;
+  subreddit?: string;
+  tags?: string[];
   raw: unknown;
+}
+
+export type PlatformErrorCode =
+  | "UPSTREAM_TIMEOUT"
+  | "UPSTREAM_HTTP_ERROR"
+  | "UPSTREAM_UNREACHABLE"
+  | "UNKNOWN";
+
+export interface PlatformError {
+  code: PlatformErrorCode;
+  message: string;
+  status?: number;
+  retryAfter?: number;
+  degraded: boolean;
+  suggestion?: string;
 }
 
 export interface NormalizedComment {

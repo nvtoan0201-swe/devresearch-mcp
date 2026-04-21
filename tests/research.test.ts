@@ -152,7 +152,8 @@ describe("runResearch (no-LLM)", () => {
       db,
       config,
     });
-    expect(res.errors?.hn).toMatch(/network down/);
+    expect(res.errors?.hn?.message).toMatch(/network down/);
+    expect(res.errors?.hn?.code).toBe("UNKNOWN");
   });
 
   it("honors depth option — deep takes top 12 instead of top 6", async () => {

@@ -25,6 +25,8 @@ interface RedditChild {
     is_self?: boolean;
     subreddit?: string;
     selftext?: string;
+    num_comments?: number;
+    link_flair_text?: string | null;
   };
 }
 
@@ -176,6 +178,14 @@ function toItem(child: RedditChild): NormalizedItem {
     !d.is_self && typeof d.url === "string" && d.url.length > 0
       ? d.url
       : permalinkUrl;
+  const excerpt =
+    typeof d.selftext === "string" && d.selftext.trim().length > 0
+      ? d.selftext.slice(0, 300)
+      : undefined;
+  const tags =
+    typeof d.link_flair_text === "string" && d.link_flair_text.length > 0
+      ? [d.link_flair_text]
+      : undefined;
   return {
     id: `reddit_${d.id}`,
     platform: "reddit",
@@ -187,6 +197,10 @@ function toItem(child: RedditChild): NormalizedItem {
       typeof d.created_utc === "number"
         ? new Date(d.created_utc * 1000).toISOString()
         : new Date(0).toISOString(),
+    excerpt,
+    numComments: typeof d.num_comments === "number" ? d.num_comments : undefined,
+    subreddit: d.subreddit,
+    tags,
     raw: d,
   };
 }

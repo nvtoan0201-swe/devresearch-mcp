@@ -194,6 +194,9 @@ describe("searchAll", () => {
       now: new Date("2026-04-21T00:00:00Z"),
     });
     expect(out.items).toHaveLength(1);
-    expect(out.errors.reddit).toMatch(/reddit down/);
+    expect(out.errors.reddit?.message).toMatch(/reddit down/);
+    expect(out.errors.reddit?.code).toBe("UNKNOWN");
+    expect(out.errors.reddit?.degraded).toBe(true);
+    expect(out.errors.reddit?.suggestion).toMatch(/hn/);
   });
 });

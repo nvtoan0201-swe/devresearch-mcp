@@ -98,6 +98,83 @@ describe("hn fetcher", () => {
     expect(u.about).toBe("Co-founder of Y Combinator.");
   });
 
+  it("getPost falls back to Firebase v0 when Algolia returns 5xx", async () => {
+    const firebaseRoot = {
+      id: 777,
+      type: "story",
+      by: "alice",
+      title: "Firebase fallback story",
+      url: "https://example.com/x",
+      score: 42,
+      time: 1775865600,
+      text: "<p>Story body</p>",
+      kids: [778],
+      descendants: 1,
+    };
+    const firebaseKid = {
+      id: 778,
+      type: "comment",
+      by: "bob",
+      text: "<p>nice</p>",
+      time: 1775869200,
+      parent: 777,
+    };
+    const fetchFn = vi.fn(async (url: string) => {
+      if (url.includes("hn.algolia.com/api/v1/items/")) {
+        return new Response("upstream exploded", {
+          status: 503,
+          headers: { "content-type": "text/plain" },
+        });
+      }
+      if (url.includes("firebaseio.com/v0/item/777")) {
+        return new Response(JSON.stringify(firebaseRoot), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }
+      if (url.includes("firebaseio.com/v0/item/778")) {
+        return new Response(JSON.stringify(firebaseKid), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }
+      return new Response("not mocked", { status: 404 });
+    }) as unknown as typeof fetch;
+    const f = createHnFetcher({ http: { fetchFn, retries: 0, backoffMs: 1 } });
+    const detail = await f.getPost!("hn_777");
+    expect(detail.item.id).toBe("hn_777");
+    expect(detail.item.title).toBe("Firebase fallback story");
+    expect(detail.item.author).toBe("alice");
+    expect(detail.item.score).toBe(42);
+    expect(detail.item.excerpt).toContain("Story body");
+    expect(detail.comments).toHaveLength(1);
+    expect(detail.comments[0].author).toBe("bob");
+    expect(detail.comments[0].text).toContain("nice");
+  });
+
+  it("populates excerpt and numComments from Algolia story_text", async () => {
+    const payload = {
+      hits: [
+        {
+          objectID: "555",
+          title: "Ask HN: something",
+          url: null,
+          author: "x",
+          points: 10,
+          num_comments: 25,
+          created_at: "2026-04-10T15:00:00Z",
+          created_at_i: 1775865600,
+          story_text: "<p>This is the body.</p>",
+        },
+      ],
+    };
+    const fetchFn = mockFetchJson(payload);
+    const f = createHnFetcher({ http: { fetchFn } });
+    const items = await f.search("x", { limit: 1 });
+    expect(items[0].excerpt).toContain("This is the body.");
+    expect(items[0].numComments).toBe(25);
+  });
+
   it("trending calls front_page tag", async () => {
     const fetchFn = vi.fn(
       async () =>

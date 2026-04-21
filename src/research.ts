@@ -1,7 +1,12 @@
 import type { Db } from "./storage/db.js";
 import type { Config } from "./config/schema.js";
 import type { Fetcher } from "./fetchers/types.js";
-import type { NormalizedItem, Platform, PostDetail } from "./types.js";
+import type {
+  NormalizedItem,
+  Platform,
+  PlatformError,
+  PostDetail,
+} from "./types.js";
 import { searchAll } from "./orchestrator.js";
 import { scoreItem, type HeuristicScores } from "./scoring/heuristics.js";
 
@@ -56,7 +61,7 @@ export interface ResearchResult {
   };
   top_posts: ResearchTopPost[];
   aggregate: ResearchAggregate;
-  errors?: Partial<Record<Platform, string>>;
+  errors?: Partial<Record<Platform, PlatformError>>;
   guidance: string;
 }
 

@@ -6,7 +6,7 @@ import type {
   UserSummary,
   TrendingOptions,
 } from "../types.js";
-import { httpGetJson } from "./http.js";
+import { httpGetJson, HttpError } from "./http.js";
 
 interface AlgoliaHit {
   objectID: string;
@@ -45,6 +45,23 @@ interface AlgoliaUser {
   created_at?: string | null;
 }
 
+interface FirebaseItem {
+  id: number;
+  type?: string;
+  by?: string;
+  text?: string;
+  title?: string;
+  url?: string;
+  score?: number;
+  time?: number;
+  kids?: number[];
+  descendants?: number;
+  dead?: boolean;
+  deleted?: boolean;
+}
+
+const FIREBASE_MAX_COMMENTS = 200;
+
 export function createHnFetcher(deps: FetcherDeps = {}): Fetcher {
   const now = deps.now ?? (() => new Date());
 
@@ -80,44 +97,16 @@ export function createHnFetcher(deps: FetcherDeps = {}): Fetcher {
     },
     async getPost(id: string): Promise<PostDetail> {
       const bareId = id.startsWith("hn_") ? id.slice(3) : id;
-      const url = `https://hn.algolia.com/api/v1/items/${encodeURIComponent(bareId)}`;
-      const root = await httpGetJson<AlgoliaItemNode>(url, deps.http);
-      const item: NormalizedItem = {
-        id: `hn_${root.id}`,
-        platform: "hn",
-        url:
-          root.url && root.url.length > 0
-            ? root.url
-            : `https://news.ycombinator.com/item?id=${root.id}`,
-        title: root.title ?? "",
-        author: root.author ?? "",
-        score: typeof root.points === "number" ? root.points : 0,
-        ts: root.created_at ?? new Date(0).toISOString(),
-        raw: root,
-      };
-      const comments: NormalizedComment[] = [];
-      const walk = (node: AlgoliaItemNode, depth: number, parentId?: string): void => {
-        for (const child of node.children ?? []) {
-          if (child.type === "comment" && child.text) {
-            const cid = `hn_${child.id}`;
-            comments.push({
-              id: cid,
-              itemId: item.id,
-              author: child.author ?? "",
-              text: stripHtml(child.text),
-              parentId,
-              score: 0,
-              ts: child.created_at ?? item.ts,
-              depth,
-            });
-            walk(child, depth + 1, cid);
-          } else {
-            walk(child, depth, parentId);
-          }
+      try {
+        const url = `https://hn.algolia.com/api/v1/items/${encodeURIComponent(bareId)}`;
+        const root = await httpGetJson<AlgoliaItemNode>(url, deps.http);
+        return algoliaItemToDetail(root);
+      } catch (err) {
+        if (err instanceof HttpError) {
+          return await firebaseGetPost(bareId, deps);
         }
-      };
-      walk(root, 0);
-      return { item, comments };
+        throw err;
+      }
     },
     async getUser(username: string): Promise<UserSummary> {
       const url = `https://hn.algolia.com/api/v1/users/${encodeURIComponent(username)}`;
@@ -131,6 +120,114 @@ export function createHnFetcher(deps: FetcherDeps = {}): Fetcher {
       };
     },
   };
+}
+
+function algoliaItemToDetail(root: AlgoliaItemNode): PostDetail {
+  const item: NormalizedItem = {
+    id: `hn_${root.id}`,
+    platform: "hn",
+    url:
+      root.url && root.url.length > 0
+        ? root.url
+        : `https://news.ycombinator.com/item?id=${root.id}`,
+    title: root.title ?? "",
+    author: root.author ?? "",
+    score: typeof root.points === "number" ? root.points : 0,
+    ts: root.created_at ?? new Date(0).toISOString(),
+    excerpt: root.text ? stripHtml(root.text).slice(0, 300) : undefined,
+    raw: root,
+  };
+  const comments: NormalizedComment[] = [];
+  const walk = (node: AlgoliaItemNode, depth: number, parentId?: string): void => {
+    for (const child of node.children ?? []) {
+      if (child.type === "comment" && child.text) {
+        const cid = `hn_${child.id}`;
+        comments.push({
+          id: cid,
+          itemId: item.id,
+          author: child.author ?? "",
+          text: stripHtml(child.text),
+          parentId,
+          score: 0,
+          ts: child.created_at ?? item.ts,
+          depth,
+        });
+        walk(child, depth + 1, cid);
+      } else {
+        walk(child, depth, parentId);
+      }
+    }
+  };
+  walk(root, 0);
+  item.numComments = comments.length;
+  return { item, comments };
+}
+
+async function firebaseGetPost(
+  bareId: string,
+  deps: FetcherDeps,
+): Promise<PostDetail> {
+  const url = `https://hacker-news.firebaseio.com/v0/item/${encodeURIComponent(bareId)}.json`;
+  const root = await httpGetJson<FirebaseItem | null>(url, deps.http);
+  if (!root) throw new Error(`HN item not found on Firebase: ${bareId}`);
+  const ts = root.time
+    ? new Date(root.time * 1000).toISOString()
+    : new Date(0).toISOString();
+  const item: NormalizedItem = {
+    id: `hn_${root.id}`,
+    platform: "hn",
+    url:
+      root.url && root.url.length > 0
+        ? root.url
+        : `https://news.ycombinator.com/item?id=${root.id}`,
+    title: root.title ?? "",
+    author: root.by ?? "",
+    score: typeof root.score === "number" ? root.score : 0,
+    ts,
+    excerpt: root.text ? stripHtml(root.text).slice(0, 300) : undefined,
+    numComments: typeof root.descendants === "number" ? root.descendants : undefined,
+    raw: root,
+  };
+  const comments: NormalizedComment[] = [];
+  let fetched = 0;
+  const walk = async (
+    kidIds: number[] | undefined,
+    depth: number,
+    parentId: string | undefined,
+  ): Promise<void> => {
+    if (!kidIds) return;
+    for (const kid of kidIds) {
+      if (fetched >= FIREBASE_MAX_COMMENTS) return;
+      fetched += 1;
+      let child: FirebaseItem | null = null;
+      try {
+        child = await httpGetJson<FirebaseItem | null>(
+          `https://hacker-news.firebaseio.com/v0/item/${kid}.json`,
+          deps.http,
+        );
+      } catch {
+        continue;
+      }
+      if (!child || child.deleted || child.dead || !child.text) {
+        await walk(child?.kids, depth, parentId);
+        continue;
+      }
+      const cid = `hn_${child.id}`;
+      comments.push({
+        id: cid,
+        itemId: item.id,
+        author: child.by ?? "",
+        text: stripHtml(child.text),
+        parentId,
+        score: 0,
+        ts: child.time ? new Date(child.time * 1000).toISOString() : item.ts,
+        depth,
+      });
+      await walk(child.kids, depth + 1, cid);
+    }
+  };
+  await walk(root.kids, 0, undefined);
+  return { item, comments };
 }
 
 function stripHtml(s: string): string {
@@ -148,6 +245,9 @@ function stripHtml(s: string): string {
 
 function toItem(hit: AlgoliaHit): NormalizedItem {
   const hnUrl = `https://news.ycombinator.com/item?id=${hit.objectID}`;
+  const excerpt = hit.story_text
+    ? stripHtml(hit.story_text).slice(0, 300)
+    : undefined;
   return {
     id: `hn_${hit.objectID}`,
     platform: "hn",
@@ -156,6 +256,8 @@ function toItem(hit: AlgoliaHit): NormalizedItem {
     author: hit.author ?? "",
     score: typeof hit.points === "number" ? hit.points : 0,
     ts: hit.created_at ?? new Date(0).toISOString(),
+    excerpt,
+    numComments: typeof hit.num_comments === "number" ? hit.num_comments : undefined,
     raw: hit,
   };
 }

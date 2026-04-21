@@ -18,6 +18,8 @@ interface LobstersStory {
   comment_count?: number;
   submitter_user?: string | { username?: string };
   tags?: string[];
+  description?: string | null;
+  description_plain?: string | null;
 }
 
 interface LobstersComment {
@@ -135,6 +137,13 @@ function toItem(s: LobstersStory): NormalizedItem {
   const fallbackUrl = s.short_id_url ?? `https://lobste.rs/s/${s.short_id}`;
   const externalUrl =
     typeof s.url === "string" && s.url.length > 0 ? s.url : fallbackUrl;
+  const descriptionRaw =
+    (typeof s.description_plain === "string" && s.description_plain.length > 0
+      ? s.description_plain
+      : typeof s.description === "string" && s.description.length > 0
+        ? s.description
+        : undefined) ?? undefined;
+  const excerpt = descriptionRaw ? descriptionRaw.slice(0, 300) : undefined;
   return {
     id: `lobsters_${s.short_id}`,
     platform: "lobsters",
@@ -145,6 +154,10 @@ function toItem(s: LobstersStory): NormalizedItem {
     ts: s.created_at
       ? new Date(s.created_at).toISOString()
       : new Date(0).toISOString(),
+    excerpt,
+    numComments:
+      typeof s.comment_count === "number" ? s.comment_count : undefined,
+    tags: Array.isArray(s.tags) && s.tags.length > 0 ? s.tags : undefined,
     raw: s,
   };
 }

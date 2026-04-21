@@ -2,7 +2,11 @@ import { z } from "zod";
 import type { Db } from "../storage/db.js";
 import type { Config } from "../config/schema.js";
 import type { Fetcher } from "../fetchers/types.js";
-import type { Platform } from "../types.js";
+import type {
+  NormalizedComment,
+  NormalizedItem,
+  Platform,
+} from "../types.js";
 import { searchAll } from "../orchestrator.js";
 import { scoreItem } from "../scoring/heuristics.js";
 import { runResearch } from "../research.js";
@@ -37,11 +41,13 @@ const SearchArgs = z.object({
   limit: z.number().int().positive().max(100).optional(),
   windowDays: z.number().int().positive().max(365).optional(),
   platforms: z.array(PlatformEnum).optional(),
+  verbose: z.boolean().optional(),
 });
 
 const GetPostArgs = z.object({
   platform: PlatformEnum,
   id: z.string().min(1),
+  verbose: z.boolean().optional(),
 });
 
 const GetUserArgs = z.object({
@@ -53,6 +59,7 @@ const TrendingArgs = z.object({
   platform: PlatformEnum.optional(),
   limit: z.number().int().positive().max(100).optional(),
   windowDays: z.number().int().positive().max(365).optional(),
+  verbose: z.boolean().optional(),
 });
 
 const ResearchArgs = z.object({
@@ -61,12 +68,15 @@ const ResearchArgs = z.object({
   depth: z.enum(["normal", "deep"]).optional(),
 });
 
+const VERBOSE_DESCRIPTION =
+  "If true, include the raw platform payload in each item. Default false (slim response).";
+
 export function listTools(): McpToolDefinition[] {
   return [
     {
       name: "search",
       description:
-        "Search developer platforms (HN, Reddit, Lobsters) for a query; returns normalized items clustered by URL/title similarity.",
+        "Search developer platforms (HN, Reddit, Lobsters) for a query; returns normalized items clustered by URL/title similarity. Slim by default — pass verbose=true to include raw platform data.",
       inputSchema: {
         type: "object",
         properties: {
@@ -82,6 +92,7 @@ export function listTools(): McpToolDefinition[] {
             type: "array",
             items: { type: "string", enum: ["hn", "reddit", "lobsters"] },
           },
+          verbose: { type: "boolean", description: VERBOSE_DESCRIPTION },
         },
         required: ["query"],
       },
@@ -89,12 +100,13 @@ export function listTools(): McpToolDefinition[] {
     {
       name: "get_post",
       description:
-        "Fetch a single post and its comment tree from a given platform, plus heuristic hype/substance scores.",
+        "Fetch a single post and its comment tree from a given platform, plus heuristic hype/substance scores. Slim by default.",
       inputSchema: {
         type: "object",
         properties: {
           platform: { type: "string", enum: ["hn", "reddit", "lobsters"] },
           id: { type: "string" },
+          verbose: { type: "boolean", description: VERBOSE_DESCRIPTION },
         },
         required: ["platform", "id"],
       },
@@ -114,13 +126,14 @@ export function listTools(): McpToolDefinition[] {
     {
       name: "trending",
       description:
-        "Return currently trending posts from one or all platforms (front page / hot / hottest).",
+        "Return currently trending posts from one or all platforms (front page / hot / hottest). Slim by default.",
       inputSchema: {
         type: "object",
         properties: {
           platform: { type: "string", enum: ["hn", "reddit", "lobsters"] },
           limit: { type: "integer", minimum: 1, maximum: 100 },
           windowDays: { type: "integer", minimum: 1, maximum: 365 },
+          verbose: { type: "boolean", description: VERBOSE_DESCRIPTION },
         },
       },
     },
@@ -152,6 +165,20 @@ function errorResult(message: string): McpToolResult {
     isError: true,
     content: [{ type: "text", text: message }],
   };
+}
+
+function slimItem(it: NormalizedItem, verbose: boolean): Partial<NormalizedItem> {
+  if (verbose) return it;
+  const { raw: _raw, ...rest } = it;
+  return rest;
+}
+
+function slimComment(
+  c: NormalizedComment,
+  verbose: boolean,
+): NormalizedComment {
+  if (verbose) return c;
+  return c;
 }
 
 export async function callTool(
@@ -204,13 +231,14 @@ async function handleSearch(
     options: { limit: args.limit, windowDays: args.windowDays },
     now: deps.now?.(),
   });
+  const verbose = args.verbose === true;
   const clustered = buildClusteredView(result.items, result.clusters);
   return textResult({
     query: args.query,
     count: result.items.length,
     clusterCount: clustered.length,
     errors: result.errors,
-    items: result.items,
+    items: result.items.map((it) => slimItem(it, verbose)),
     clusters: clustered,
   });
 }
@@ -246,11 +274,12 @@ async function handleGetPost(
   }
   const detail = await fetcher.getPost(args.id);
   const scores = scoreItem(detail, { now: deps.now?.() });
+  const verbose = args.verbose === true;
   return textResult({
-    item: detail.item,
+    item: slimItem(detail.item, verbose),
     commentCount: detail.comments.length,
     scores,
-    comments: detail.comments,
+    comments: detail.comments.map((c) => slimComment(c, verbose)),
   });
 }
 
@@ -272,6 +301,7 @@ async function handleTrending(
   deps: ToolDeps,
 ): Promise<McpToolResult> {
   const options = { limit: args.limit, windowDays: args.windowDays };
+  const verbose = args.verbose === true;
   if (args.platform) {
     const fetcher = deps.fetchers.get(args.platform);
     if (!fetcher) return errorResult(`Platform not enabled: ${args.platform}`);
@@ -279,10 +309,14 @@ async function handleTrending(
       return errorResult(`Platform ${args.platform} does not support trending`);
     }
     const items = await fetcher.trending(options);
-    return textResult({ platform: args.platform, count: items.length, items });
+    return textResult({
+      platform: args.platform,
+      count: items.length,
+      items: items.map((it) => slimItem(it, verbose)),
+    });
   }
 
-  const errors: Partial<Record<Platform, string>> = {};
+  const errors: Record<string, string> = {};
   const results = await Promise.all(
     [...deps.fetchers.entries()].map(async ([p, f]) => {
       if (!f.trending) return { platform: p, items: [] };
@@ -296,7 +330,11 @@ async function handleTrending(
     }),
   );
   const merged = results.flatMap((r) => r.items);
-  return textResult({ count: merged.length, errors, items: merged });
+  return textResult({
+    count: merged.length,
+    errors,
+    items: merged.map((it) => slimItem(it, verbose)),
+  });
 }
 
 async function handleResearch(

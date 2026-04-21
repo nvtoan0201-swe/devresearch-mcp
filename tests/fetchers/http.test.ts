@@ -1,5 +1,9 @@
 import { describe, it, expect, vi } from "vitest";
-import { httpGetJson, httpGetText } from "../../src/fetchers/http.js";
+import {
+  httpGetJson,
+  httpGetText,
+  HttpError,
+} from "../../src/fetchers/http.js";
 
 function makeResponse(
   status: number,
@@ -77,6 +81,73 @@ describe("httpGetJson", () => {
     await expect(
       httpGetJson("https://x.test/", { fetchFn, timeoutMs: 5, retries: 0 }),
     ).rejects.toThrow(/timeout|abort/i);
+  });
+});
+
+describe("HttpError shape", () => {
+  it("surfaces UPSTREAM_HTTP_ERROR with status on non-retryable 4xx", async () => {
+    const fetchFn = vi
+      .fn()
+      .mockResolvedValue(
+        new Response("nope", {
+          status: 404,
+          headers: { "content-type": "text/plain" },
+        }),
+      );
+    const err = await httpGetJson("https://x.test/", {
+      fetchFn,
+      retries: 0,
+      backoffMs: 1,
+    }).catch((e) => e);
+    expect(err).toBeInstanceOf(HttpError);
+    expect(err.code).toBe("UPSTREAM_HTTP_ERROR");
+    expect(err.status).toBe(404);
+  });
+
+  it("surfaces UPSTREAM_TIMEOUT when aborted", async () => {
+    const fetchFn = vi.fn(
+      (_url: string, init?: RequestInit) =>
+        new Promise<Response>((_resolve, reject) => {
+          init?.signal?.addEventListener("abort", () => {
+            reject(new DOMException("aborted", "AbortError"));
+          });
+        }),
+    );
+    const err = await httpGetJson("https://x.test/", {
+      fetchFn,
+      timeoutMs: 5,
+      retries: 0,
+    }).catch((e) => e);
+    expect(err).toBeInstanceOf(HttpError);
+    expect(err.code).toBe("UPSTREAM_TIMEOUT");
+  });
+
+  it("surfaces UPSTREAM_UNREACHABLE on network error", async () => {
+    const fetchFn = vi.fn().mockRejectedValue(new TypeError("fetch failed"));
+    const err = await httpGetJson("https://x.test/", {
+      fetchFn,
+      retries: 0,
+      backoffMs: 1,
+    }).catch((e) => e);
+    expect(err).toBeInstanceOf(HttpError);
+    expect(err.code).toBe("UPSTREAM_UNREACHABLE");
+    expect(err.message).toMatch(/fetch failed/);
+  });
+
+  it("parses numeric Retry-After on final 429", async () => {
+    const fetchFn = vi.fn().mockResolvedValue(
+      new Response("rate-limited", {
+        status: 429,
+        headers: { "retry-after": "42", "content-type": "text/plain" },
+      }),
+    );
+    const err = await httpGetJson("https://x.test/", {
+      fetchFn,
+      retries: 0,
+      backoffMs: 1,
+    }).catch((e) => e);
+    expect(err).toBeInstanceOf(HttpError);
+    expect(err.retryAfter).toBe(42);
   });
 });
 
