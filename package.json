@@ -5,10 +5,14 @@
   "type": "module",
   "author": "Toan Nguyen",
   "bin": {
-    "devresearch-mcp": "./dist/index.js"
+    "devresearch-mcp": "dist/index.js"
   },
-  "main": "./dist/index.js",
-  "files": ["dist", "README.md", "LICENSE"],
+  "main": "dist/index.js",
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "build": "tsc && node -e \"require('fs').copyFileSync('src/storage/schema.sql', 'dist/storage/schema.sql')\"",
     "dev": "tsx src/index.ts",
