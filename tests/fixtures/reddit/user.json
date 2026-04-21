@@ -1,0 +1,11 @@
+{
+  "kind": "t2",
+  "data": {
+    "name": "spez",
+    "total_karma": 500000,
+    "link_karma": 100000,
+    "comment_karma": 400000,
+    "created_utc": 1117990000,
+    "subreddit": { "public_description": "CEO, reddit" }
+  }
+}

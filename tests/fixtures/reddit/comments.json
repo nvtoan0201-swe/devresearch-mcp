@@ -1,0 +1,75 @@
+[
+  {
+    "kind": "Listing",
+    "data": {
+      "children": [
+        {
+          "kind": "t3",
+          "data": {
+            "id": "abc",
+            "title": "Rust 1.80 released",
+            "url": "https://blog.rust-lang.org/1-80",
+            "permalink": "/r/rust/comments/abc/rust_1_80/",
+            "author": "u1",
+            "score": 500,
+            "created_utc": 1745193600,
+            "is_self": false,
+            "subreddit": "rust"
+          }
+        }
+      ]
+    }
+  },
+  {
+    "kind": "Listing",
+    "data": {
+      "children": [
+        {
+          "kind": "t1",
+          "data": {
+            "id": "c1",
+            "author": "alice",
+            "body": "Great release!",
+            "score": 30,
+            "created_utc": 1745197200,
+            "parent_id": "t3_abc",
+            "link_id": "t3_abc",
+            "replies": {
+              "kind": "Listing",
+              "data": {
+                "children": [
+                  {
+                    "kind": "t1",
+                    "data": {
+                      "id": "c2",
+                      "author": "bob",
+                      "body": "Agreed",
+                      "score": 10,
+                      "created_utc": 1745200800,
+                      "parent_id": "t1_c1",
+                      "link_id": "t3_abc",
+                      "replies": ""
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "kind": "t1",
+          "data": {
+            "id": "c3",
+            "author": "carol",
+            "body": "Overhyped honestly",
+            "score": 2,
+            "created_utc": 1745204400,
+            "parent_id": "t3_abc",
+            "link_id": "t3_abc",
+            "replies": ""
+          }
+        }
+      ]
+    }
+  }
+]
