@@ -8,6 +8,8 @@ import {
 import { loadConfig } from "./config/loader.js";
 import { defaultConfigPath, defaultCachePath, expandHome } from "./config/paths.js";
 import { openDb } from "./storage/db.js";
+import { createFetchers } from "./fetchers/registry.js";
+import { listTools, callTool } from "./mcp/tools.js";
 
 async function main(): Promise<void> {
   const configPath = process.env.DEVRESEARCH_CONFIG ?? defaultConfigPath();
@@ -15,6 +17,7 @@ async function main(): Promise<void> {
 
   const cachePath = expandHome(config.cache.path || defaultCachePath());
   const db = openDb(cachePath);
+  const fetchers = createFetchers(config);
 
   const server = new Server(
     { name: "devresearch-mcp", version: "0.0.1" },
@@ -22,11 +25,13 @@ async function main(): Promise<void> {
   );
 
   server.setRequestHandler(ListToolsRequestSchema, async () => ({
-    tools: [],
+    tools: listTools(),
   }));
 
   server.setRequestHandler(CallToolRequestSchema, async (req) => {
-    throw new Error(`Unknown tool: ${req.params.name}`);
+    const { name, arguments: args } = req.params;
+    const result = await callTool(name, args ?? {}, { fetchers, db, config });
+    return result as unknown as { content: typeof result.content; isError?: boolean };
   });
 
   const transport = new StdioServerTransport();
@@ -44,7 +49,7 @@ async function main(): Promise<void> {
   process.on("SIGTERM", shutdown);
 
   process.stderr.write(
-    `devresearch-mcp ready (config=${configPath}, cache=${cachePath})\n`,
+    `devresearch-mcp ready (config=${configPath}, cache=${cachePath}, tools=${listTools().length})\n`,
   );
 }
 
