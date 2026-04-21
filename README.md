@@ -34,7 +34,7 @@ The `research` tool requires `ANTHROPIC_API_KEY`. Other tools (`search`, `get_po
 ## Local development
 
 ```bash
-git clone https://github.com/toannd/devresearch-mcp.git
+git clone https://github.com/nvtoan0201-swe/devresearch-mcp.git
 cd devresearch-mcp
 npm install
 npm run build

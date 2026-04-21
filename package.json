@@ -33,11 +33,11 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/toannd/devresearch-mcp.git"
+    "url": "git+https://github.com/nvtoan0201-swe/devresearch-mcp.git"
   },
-  "homepage": "https://github.com/toannd/devresearch-mcp#readme",
+  "homepage": "https://github.com/nvtoan0201-swe/devresearch-mcp#readme",
   "bugs": {
-    "url": "https://github.com/toannd/devresearch-mcp/issues"
+    "url": "https://github.com/nvtoan0201-swe/devresearch-mcp/issues"
   },
   "license": "MIT",
   "engines": {
