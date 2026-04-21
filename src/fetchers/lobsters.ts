@@ -1,5 +1,11 @@
 import type { Fetcher, FetcherDeps, SearchOptions } from "./types.js";
-import type { NormalizedItem } from "../types.js";
+import type {
+  NormalizedItem,
+  NormalizedComment,
+  PostDetail,
+  UserSummary,
+  TrendingOptions,
+} from "../types.js";
 import { httpGetJson } from "./http.js";
 
 interface LobstersStory {
@@ -10,11 +16,55 @@ interface LobstersStory {
   url?: string | null;
   score?: number;
   comment_count?: number;
-  submitter_user?: string;
+  submitter_user?: string | { username?: string };
   tags?: string[];
 }
 
+interface LobstersComment {
+  short_id: string;
+  comment: string;
+  commenting_user?: string | { username?: string };
+  score?: number;
+  created_at?: string;
+  parent_comment?: string | null;
+  indent_level?: number;
+}
+
+interface LobstersStoryDetail extends LobstersStory {
+  comments?: LobstersComment[];
+}
+
+interface LobstersUser {
+  username: string;
+  created_at?: string;
+  karma?: number;
+  about?: string;
+}
+
+function userString(u: LobstersStory["submitter_user"]): string {
+  if (!u) return "";
+  if (typeof u === "string") return u;
+  return u.username ?? "";
+}
+
+function commenterString(u: LobstersComment["commenting_user"]): string {
+  if (!u) return "";
+  if (typeof u === "string") return u;
+  return u.username ?? "";
+}
+
 export function createLobstersFetcher(deps: FetcherDeps = {}): Fetcher {
+  const trending = async (options: TrendingOptions): Promise<NormalizedItem[]> => {
+    const limit = options.limit ?? 25;
+    const url = "https://lobste.rs/hottest.json";
+    const data = await httpGetJson<LobstersStory[] | { stories: LobstersStory[] }>(
+      url,
+      deps.http,
+    );
+    const stories = Array.isArray(data) ? data : (data.stories ?? []);
+    return stories.slice(0, limit).map(toItem);
+  };
+
   return {
     platform: "lobsters",
     async search(query, options: SearchOptions): Promise<NormalizedItem[]> {
@@ -37,6 +87,47 @@ export function createLobstersFetcher(deps: FetcherDeps = {}): Fetcher {
       const stories = Array.isArray(data) ? data : (data.stories ?? []);
       return stories.slice(0, limit).map(toItem);
     },
+
+    trending,
+
+    async getPost(id: string): Promise<PostDetail> {
+      const bareId = id.startsWith("lobsters_")
+        ? id.slice("lobsters_".length)
+        : id;
+      const url = `https://lobste.rs/s/${encodeURIComponent(bareId)}.json`;
+      const data = await httpGetJson<LobstersStoryDetail>(url, deps.http);
+      const item = toItem(data);
+      const byShortId = new Map<string, string>();
+      for (const c of data.comments ?? []) {
+        byShortId.set(c.short_id, `lobsters_c_${c.short_id}`);
+      }
+      const comments: NormalizedComment[] = (data.comments ?? []).map((c) => ({
+        id: `lobsters_c_${c.short_id}`,
+        itemId: item.id,
+        author: commenterString(c.commenting_user),
+        text: c.comment,
+        parentId:
+          c.parent_comment && byShortId.has(c.parent_comment)
+            ? byShortId.get(c.parent_comment)
+            : undefined,
+        score: typeof c.score === "number" ? c.score : 0,
+        ts: c.created_at ? new Date(c.created_at).toISOString() : item.ts,
+        depth: typeof c.indent_level === "number" ? c.indent_level - 1 : 0,
+      }));
+      return { item, comments };
+    },
+
+    async getUser(username: string): Promise<UserSummary> {
+      const url = `https://lobste.rs/u/${encodeURIComponent(username)}.json`;
+      const u = await httpGetJson<LobstersUser>(url, deps.http);
+      return {
+        platform: "lobsters",
+        username: u.username,
+        karma: u.karma,
+        createdAt: u.created_at,
+        about: u.about,
+      };
+    },
   };
 }
 
@@ -49,7 +140,7 @@ function toItem(s: LobstersStory): NormalizedItem {
     platform: "lobsters",
     url: externalUrl,
     title: s.title ?? "",
-    author: s.submitter_user ?? "",
+    author: userString(s.submitter_user),
     score: typeof s.score === "number" ? s.score : 0,
     ts: s.created_at
       ? new Date(s.created_at).toISOString()

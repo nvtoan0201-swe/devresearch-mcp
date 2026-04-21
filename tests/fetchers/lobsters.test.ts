@@ -11,6 +11,12 @@ const FIXTURE = JSON.parse(
     "utf8",
   ),
 );
+const STORY_FIXTURE = JSON.parse(
+  fs.readFileSync(path.join(__dirname, "../fixtures/lobsters/story.json"), "utf8"),
+);
+const USER_FIXTURE = JSON.parse(
+  fs.readFileSync(path.join(__dirname, "../fixtures/lobsters/user.json"), "utf8"),
+);
 
 function mockFetchJson(payload: unknown): typeof fetch {
   return vi.fn(async () =>
@@ -74,5 +80,35 @@ describe("lobsters fetcher", () => {
     const called = (fetchFn as unknown as ReturnType<typeof vi.fn>).mock
       .calls[0][0] as string;
     expect(called).toContain("lobste.rs/hottest.json");
+  });
+
+  it("getPost returns item + comments with parent linkage", async () => {
+    const fetchFn = mockFetchJson(STORY_FIXTURE);
+    const f = createLobstersFetcher({ http: { fetchFn } });
+    const detail = await f.getPost!("lobsters_xy");
+    expect(detail.item.id).toBe("lobsters_xy");
+    expect(detail.item.title).toBe("Zig 0.13 released");
+    expect(detail.comments).toHaveLength(2);
+    const c1 = detail.comments.find((c) => c.author === "bob");
+    const c2 = detail.comments.find((c) => c.author === "carol");
+    expect(c1?.depth).toBe(0);
+    expect(c2?.depth).toBe(1);
+    expect(c2?.parentId).toBe(c1?.id);
+  });
+
+  it("getUser returns karma + createdAt", async () => {
+    const fetchFn = mockFetchJson(USER_FIXTURE);
+    const f = createLobstersFetcher({ http: { fetchFn } });
+    const u = await f.getUser!("jcs");
+    expect(u.username).toBe("jcs");
+    expect(u.karma).toBe(25000);
+    expect(u.about).toBe("Founder of Lobsters");
+  });
+
+  it("trending hits hottest.json", async () => {
+    const fetchFn = mockFetchJson(FIXTURE);
+    const f = createLobstersFetcher({ http: { fetchFn } });
+    const items = await f.trending!({ limit: 2 });
+    expect(items).toHaveLength(2);
   });
 });
